@@ -1,0 +1,10 @@
+//This query returns the number of incidents categorized by label name (tag name).
+
+let Starttime= datetime(2024-09-15 00:00:00);
+let Endtime=datetime(2024-10-07 23:59:59.9);
+SecurityIncident
+| where CreatedTime between (Starttime .. Endtime)
+| summarize arg_max(TimeGenerated, *) by IncidentNumber
+| mv-expand Labels
+| summarize dcount(IncidentNumber) by tostring(Labels.labelName)
+| sort by Labels_labelName
