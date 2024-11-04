@@ -1,0 +1,11 @@
+//We have defined two policies in Microsoft Defender for Cloud Apps to block risky applications with a risk level of 1 or 2. When each policy is triggered, it generates an alert with the following names:
+//- Block Risky Applications - Risk 2
+//- Block Risky Applications - Risk 1
+
+//This query will provide a list of blocked web applications, including the associated risk level and application name.
+SecurityAlert
+| where AlertName == "Block Risky Applications-Risk 2" or AlertName == "Block Risky Applications-Risk 1"
+| summarize arg_max(TimeGenerated, *) by SystemAlertId
+| extend Application_Name = tostring(parse_json(ExtendedProperties).["Cloud Applications"]) 
+| extend RiskLevel = case(AlertName == "Block Risky Applications-Risk 2", "2", AlertName == "Block Risky Applications-Risk 1", "1", "Null" )
+| project TimeGenerated, Application_Name, RiskLevel
