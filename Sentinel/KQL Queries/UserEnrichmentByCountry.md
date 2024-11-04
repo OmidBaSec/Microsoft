@@ -2,6 +2,7 @@
 
 //If you are using the 'country' field for users in Azure Entra ID and would like to find alerts related to users from a specific country
 
+KQL Query:
 // for MDE Alerts
 SecurityAlert
 | summarize arg_max(TimeGenerated, *) by SystemAlertId
