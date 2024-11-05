@@ -1,22 +1,28 @@
 //Number of incidents generated during business hours. This query also excludes public holidays.
 
-
-//Use this format to define your own public holidays
-// let public_Holidays= dynamic(['DD/MM', DD/MM'] );
-let public_Holidays= dynamic(['01/01', '06/01/','29/03','01/04','01/05','09/05','20/05','30/05','15/08','03/10','01/11','25/12','26/12' ] );
-let StarTime= datetime(2024-07-01 00:00:00);
-let Endtime=datetime(2024-07-31 23:59:59.9);
+// Define public holidays as day/month values to filter out incidents on these dates
+let public_Holidays = dynamic(['01/01', '06/01', '29/03', '01/04', '01/05', '09/05', '20/05', '30/05', '15/08', '03/10', '01/11', '25/12', '26/12']);
+// Set the start and end time for the query range (July 2024)
+let StarTime = datetime(2024-07-01 00:00:00);
+let Endtime = datetime(2024-07-31 23:59:59.9);
 SecurityIncident
 | where CreatedTime >= StarTime and CreatedTime <= Endtime
+// Get the earliest record for each IncidentNumber
 | summarize arg_min(TimeGenerated, *) by IncidentNumber
-| extend firstseen=TimeGenerated
-| extend DatesDDMM=format_datetime(startofday(firstseen), 'dd/MM')
+// Create a column for the first seen time of the incident
+| extend firstseen = TimeGenerated
+// Format the incident date as 'dd/MM' for easier comparison with the public_Holidays list
+| extend DatesDDMM = format_datetime(startofday(firstseen), 'dd/MM')
+// Exclude incidents that occurred on public holidays
 | where DatesDDMM !in (public_Holidays)
+// Extract the hour and day of the week for each incident's first seen time
 | extend hour = datetime_part("hour", firstseen)
-| extend dayofweek=dayofweek(firstseen)
+| extend dayofweek = dayofweek(firstseen)
+// Convert numeric day of week to a human-readable name (e.g., 1 = Monday)
 | extend dayofweekName=case(dayofweek=='1.00:00:00', "Monday", dayofweek=='2.00:00:00', "Tuesday", dayofweek=='3.00:00:00', "Wednesday",dayofweek=='4.00:00:00', "Thursday",dayofweek=='5.00:00:00', "Friday", dayofweek=='6.00:00:00', "Saturday", dayofweek=='0.00:00:00', "Sunday", "False")
-| where hour between (08 .. 17) and dayofweekName  in ('Monday','Tuesday','Wednesday','Thursday','Friday')
-| project-reorder dayofweek,dayofweekName, hour, DatesDDMM
+// Filter incidents to only include those occurring between 08:00 - 17:00 on weekdays (Monday to Friday)
+| where hour between (08 .. 17) and dayofweekName in ('Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday')
+| project-reorder dayofweek, dayofweekName, hour, DatesDDMM
+// Count the number of incidents per day (after all filters are applied)
 | summarize count() by DatesDDMM
 | sort by DatesDDMM
-
