@@ -1,0 +1,14 @@
+// This query calculates the average resolution time, in hours, broken down by severity.
+
+let Starttime= datetime(2024-02-01 00:00:00);
+let Endtime=datetime(2024-02-29 23:59:59.9);
+SecurityIncident
+| where CreatedTime >= Starttime and CreatedTime <= Endtime
+| summarize arg_max(TimeGenerated, *) by IncidentNumber
+// Filter only incidents with a "Closed" status
+| where Status == "Closed"
+// Calculate the time difference in seconds between CreatedTime and ClosedTime
+| extend diffsecond=datetime_diff("second", ClosedTime, CreatedTime)
+| summarize avgResolseconds=avg(diffsecond) by Severity
+| extend avgResolhours=avgResolseconds/3600
+| project Severity, avgResolhours
