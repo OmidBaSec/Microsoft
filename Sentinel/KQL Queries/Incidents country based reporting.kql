@@ -1,0 +1,39 @@
+//If you’re using the 'country' field for users in Azure Entra ID, use this query to view the number of incidents associated with users from different countries.
+
+let StarTime= datetime(2024-04-12 00:00:00);
+let Endtime=datetime(2024-04-18 23:59:59.9);
+let incidents1=
+SecurityAlert
+| where StartTime >= StarTime and StartTime <= EndTime
+// For these provider names, find the related user information by joining "Name" with "AccountName" in the Identity table.
+| where ProviderName == 'ASI Scheduled Alerts' or ProviderName == 'Azure Advanced Threat Protection' or  ProviderName == 'Azure Security Center' or ProviderName == 'ASI NRT Alerts' 
+| summarize arg_max(TimeGenerated, *) by SystemAlertId
+| extend EntitiesS= parse_json(Entities)
+| mv-expand EntitiesS
+| where EntitiesS.Type == "account"
+| extend NameStr=tostring(EntitiesS.Name)
+| join kind=inner (IdentityInfo | where TimeGenerated > ago(30d) | summarize arg_max(TimeGenerated, *) by AccountObjectId) on $left.NameStr == $right.AccountName
+| join kind=inner (SecurityIncident | where (CreatedTime >= StarTime and CreatedTime <= Endtime) | summarize arg_max(TimeGenerated, *) by IncidentNumber|  mv-expand AlertIds | extend AlertIdsString=tostring(AlertIds)) on  $left.SystemAlertId == $right.AlertIdsString
+| project Title, IncidentNumber, AccountName, Country, Severity;
+let incidents2=
+SecurityAlert
+| where StartTime >= StarTime and StartTime <= EndTime
+//For these provider names, retrieve the related user information by joining "AadUserId" with "AccountObjectID" in the Identity table.
+| where ProviderName == 'IPC' or ProviderName == 'OATP' or  ProviderName == 'MDATP' or ProviderName == 'MCAS' or ProviderName == 'MicrosoftThreatProtection' 
+| summarize arg_max(TimeGenerated, *) by SystemAlertId
+| extend EntitiesS= parse_json(Entities)
+| mv-expand EntitiesS
+| where EntitiesS.Type == "account"
+| extend AadUserIdStr=tostring(EntitiesS.AadUserId)
+| join kind=inner (IdentityInfo | where TimeGenerated > ago(30d) | summarize arg_max(TimeGenerated, *) by AccountObjectId) on $left.AadUserIdStr == $right.AccountObjectId
+| join kind=inner (SecurityIncident | where (CreatedTime >= StarTime and CreatedTime <= Endtime) | summarize arg_max(TimeGenerated, *) by IncidentNumber| mv-expand AlertIds | extend AlertIdsString=tostring(AlertIds)) on  $left.SystemAlertId == $right.AlertIdsString
+| project Title, IncidentNumber, AccountName, Country, Severity;
+// Combine results from both queries
+incidents1
+| union incidents2
+// Standardize country names by mapping various values to a uniform format
+| extend Country = case(Country == 'Luxemburg', 'Luxembourg', Country == 'GERMANY', 'Germany', Country == 'TURKIYE', 'Turkey', Country == 'SPAIN', 'Spain', Country == 'POLAND', 'Poland', Country == 'HUNGARY', 'Hungary', Country == 'NETHERLANDS', 'Netherlands', Country == 'ITALY', 'Italy', Country == 'BELGIUM', 'Belgium', Country == 'AUSTRIA', 'Austria', Country == 'SWITZERLAND', 'Switzerland', Country == 'PORTUGAL', 'Portugal', Country == 'TURKEY', 'Turkey', Country == 'SWEDEN', 'Sweden', Country)
+// Count unique incidents per country, severity, and incident title
+| summarize count=count_distinct(IncidentNumber) by Country, Severity, Title
+| where Country <> ''
+| sort by ['count']
